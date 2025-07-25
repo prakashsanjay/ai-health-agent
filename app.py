@@ -17,15 +17,22 @@ USERS = {
 # Session state login function
 def login():
     st.title("🔐 Login to AI Health Agent")
+    
+    # Input fields
     email = st.text_input("Email")
     password = st.text_input("Password", type="password")
+    
+    # Login button
     if st.button("Login"):
         user = USERS.get(email)
+
+        # Check credentials
         if user and user["password"] == password:
             st.session_state.user = {"email": email, "role": user["role"]}
-            st.experimental_rerun()
+            st.rerun()  # replaces st.experimental_rerun()
         else:
-            st.error("Invalid credentials")
+            st.error("❌ Invalid email or password. Please try again.")
+
 
 # New OpenAI function
 def get_triage_response(symptoms):
