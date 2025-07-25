@@ -17,7 +17,7 @@ st.header("🩺 Symptom Checker")
 symptoms = st.text_area("Enter your symptoms (e.g., cough, fever, sore throat)...")
 
 def get_triage(symptoms):
-    client = openai.OpenAI()
+    client = openai.OpenAI(api_key=st.secrets["OPENAI_API_KEY"])  # explicitly pass the key
     response = client.chat.completions.create(
         model="gpt-4",
         messages=[
@@ -28,6 +28,7 @@ def get_triage(symptoms):
         temperature=0.7
     )
     return response.choices[0].message.content.strip()
+
 
 # Step 2: Run AI Triage
 if st.button("Analyze Symptoms"):
