@@ -1,90 +1,38 @@
-
 import streamlit as st
-import openai
-import fitz  # PyMuPDF
-import pandas as pd
-import matplotlib.pyplot as plt
-from datetime import datetime
+import datetime
+from openai import OpenAI
 import os
 
-# Initialize session state
-if 'role' not in st.session_state:
-    st.session_state.role = None
+# Set your OpenAI API key (make sure you also set this in Streamlit secrets or environment)
+client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-# Title
-st.set_page_config(page_title="AI Health Agent", layout="wide")
+# App layout
+st.set_page_config(page_title="AI Health Agent", page_icon="🏥", layout="centered")
+
 st.title("🏥 AI Health Agent")
 
-# Sidebar login
-with st.sidebar:
-    st.header("Login")
-    email = st.text_input("Email")
-    password = st.text_input("Password", type="password")
-    if st.button("Login"):
-        if email == "dr@example.com" and password == "demo123":
-            st.session_state.role = "doctor"
-        elif email == "patient@example.com" and password == "demo123":
-            st.session_state.role = "patient"
-        else:
-            st.error("Invalid credentials")
+# Symptom checker
+st.header("🤔 Symptom Checker")
+symptoms = st.text_area("Describe your symptoms", placeholder="I am suffering from cough and cold")
 
-# Functions
-def symptom_triage(symptoms):
-    prompt = f"""
-    Act as a medical assistant. A patient reports the following symptoms: {symptoms}.
-    Provide an urgency level (Low, Medium, High) and a brief recommendation.
-    """
-    try:
-        openai.api_key = os.getenv("OPENAI_API_KEY")
-        response = openai.ChatCompletion.create(
-            model="gpt-4",
-            messages=[{"role": "user", "content": prompt}]
-        )
-        return response.choices[0].message.content.strip()
-    except Exception as e:
-        return f"Error: {e}"
+if st.button("Check Urgency"):
+    if symptoms:
+        with st.spinner("Analyzing symptoms..."):
+            response = client.chat.completions.create(
+                model="gpt-4",
+                messages=[
+                    {"role": "system", "content": "You are a professional healthcare triage assistant."},
+                    {"role": "user", "content": f"My symptoms are: {symptoms}. How urgent is this and what should I do next?"}
+                ]
+            )
+            st.success(response.choices[0].message.content.strip())
+    else:
+        st.warning("Please enter your symptoms.")
 
-def extract_icd_codes_from_pdf(uploaded_file):
-    text = ""
-    doc = fitz.open(stream=uploaded_file.read(), filetype="pdf")
-    for page in doc:
-        text += page.get_text()
-    # Simulated ICD/CPT extraction (in real case, use regex or LLM)
-    codes = ["ICD-10: R51", "CPT: 99213"] if "headache" in text.lower() else ["No clear codes found"]
-    return codes, text
+# Appointment booking
+st.header("📅 Book an Appointment")
+appt_date = st.date_input("Choose date", datetime.date.today())
+appt_time = st.time_input("Choose time", datetime.datetime.now().time())
+if st.button("Book"):
+    st.success(f"✅ Appointment booked on {appt_date} at {appt_time}!")
 
-# Main
-if st.session_state.role == "patient":
-    st.subheader("🤒 Symptom Checker")
-    symptoms = st.text_area("Describe your symptoms")
-    if st.button("Check Urgency"):
-        result = symptom_triage(symptoms)
-        st.success(result)
-
-    st.subheader("📅 Book an Appointment")
-    date = st.date_input("Choose date")
-    time = st.time_input("Choose time")
-    if st.button("Book"):
-        st.success(f"Appointment booked for {date} at {time}")
-
-elif st.session_state.role == "doctor":
-    st.subheader("📄 Upload EHR (PDF)")
-    uploaded_file = st.file_uploader("Upload patient's medical record", type="pdf")
-    if uploaded_file:
-        codes, text = extract_icd_codes_from_pdf(uploaded_file)
-        st.text_area("Extracted Text", text, height=200)
-        st.write("🔍 Extracted Codes:")
-        for code in codes:
-            st.code(code)
-
-    st.subheader("📊 Patient Activity Analytics")
-    data = pd.DataFrame({
-        "Activity": ["Check Triage", "Upload EHR", "Book Appointment"],
-        "Count": [10, 7, 14]
-    })
-    fig, ax = plt.subplots()
-    ax.bar(data["Activity"], data["Count"], color="skyblue")
-    st.pyplot(fig)
-
-elif st.session_state.role is None:
-    st.info("Please login from the sidebar to continue.")
