@@ -19,7 +19,8 @@ symptoms = st.text_area("Enter your symptoms (e.g., cough, fever, sore throat)..
 def get_triage(symptoms):
     client = openai.OpenAI(api_key=st.secrets["OPENAI_API_KEY"])  # explicitly pass the key
     response = client.chat.completions.create(
-        model="gpt-4",
+    model="gpt-3.5-turbo",
+
         messages=[
             {"role": "system", "content": "You are an experienced medical triage assistant."},
             {"role": "user", "content": f"The patient reports the following symptoms: {symptoms}. Provide a triage level, suggested specialist, and any immediate advice in 2-3 lines."}
