@@ -1,38 +1,90 @@
 import streamlit as st
-import datetime
-from openai import OpenAI
-import os
+import openai
 
-# Set your OpenAI API key (make sure you also set this in Streamlit secrets or environment)
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+# Securely load OpenAI API key
+openai.api_key = st.secrets["OPENAI_API_KEY"]
 
-# App layout
-st.set_page_config(page_title="AI Health Agent", page_icon="🏥", layout="centered")
+# --- Page config ---
+st.set_page_config(page_title="AI Health Agent", layout="centered")
 
-st.title("🏥 AI Health Agent")
+# --- Session State for Role Management ---
+if "role" not in st.session_state:
+    st.session_state.role = None
 
-# Symptom checker
-st.header("🤔 Symptom Checker")
-symptoms = st.text_area("Describe your symptoms", placeholder="I am suffering from cough and cold")
+# --- Login Logic ---
+def login():
+    st.title("🩺 AI Health Agent Login")
 
-if st.button("Check Urgency"):
-    if symptoms:
-        with st.spinner("Analyzing symptoms..."):
-            response = client.chat.completions.create(
-                model="gpt-4",
-                messages=[
-                    {"role": "system", "content": "You are a professional healthcare triage assistant."},
-                    {"role": "user", "content": f"My symptoms are: {symptoms}. How urgent is this and what should I do next?"}
-                ]
-            )
-            st.success(response.choices[0].message.content.strip())
-    else:
-        st.warning("Please enter your symptoms.")
+    email = st.text_input("Email")
+    password = st.text_input("Password", type="password")
+    login_btn = st.button("Login")
 
-# Appointment booking
-st.header("📅 Book an Appointment")
-appt_date = st.date_input("Choose date", datetime.date.today())
-appt_time = st.time_input("Choose time", datetime.datetime.now().time())
-if st.button("Book"):
-    st.success(f"✅ Appointment booked on {appt_date} at {appt_time}!")
+    if login_btn:
+        if email == "dr@example.com" and password == "demo123":
+            st.session_state.role = "doctor"
+        elif email == "patient@example.com" and password == "demo123":
+            st.session_state.role = "patient"
+        else:
+            st.error("Invalid login credentials")
 
+# --- Symptom Triage Prompt ---
+def get_triage_response(symptoms):
+    prompt = f"""
+You are a healthcare assistant. A patient has described their symptoms as:
+\"\"\"{symptoms}\"\"\"
+
+Give a brief summary of the likely condition and urgency level (low, moderate, high).
+Respond in plain language.
+"""
+    response = openai.ChatCompletion.create(
+        model="gpt-4",
+        messages=[{"role": "user", "content": prompt}],
+        temperature=0.5,
+        max_tokens=200,
+    )
+    return response.choices[0].message["content"]
+
+# --- Patient View ---
+def patient_dashboard():
+    st.title("👨‍⚕️ Patient Dashboard")
+
+    symptoms = st.text_area("Describe your symptoms:")
+    if st.button("Analyze"):
+        if symptoms.strip() != "":
+            with st.spinner("Analyzing symptoms..."):
+                result = get_triage_response(symptoms)
+            st.subheader("🩺 Triage Result")
+            st.success(result)
+        else:
+            st.warning("Please enter your symptoms.")
+
+    st.markdown("---")
+    st.caption("Logged in as Patient | [Logout](#)", unsafe_allow_html=True)
+    if st.button("Logout"):
+        st.session_state.role = None
+
+# --- Doctor View ---
+def doctor_dashboard():
+    st.title("🧑‍⚕️ Doctor Dashboard")
+
+    st.markdown("Welcome, Doctor. Future features here:")
+    st.markdown("- View patient summaries")
+    st.markdown("- Review uploaded EHRs")
+    st.markdown("- Monitor patient analytics")
+
+    st.markdown("---")
+    st.caption("Logged in as Doctor | [Logout](#)", unsafe_allow_html=True)
+    if st.button("Logout"):
+        st.session_state.role = None
+
+# --- App Logic ---
+def main():
+    if st.session_state.role is None:
+        login()
+    elif st.session_state.role == "patient":
+        patient_dashboard()
+    elif st.session_state.role == "doctor":
+        doctor_dashboard()
+
+if __name__ == "__main__":
+    main()
