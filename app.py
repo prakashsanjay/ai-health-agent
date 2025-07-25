@@ -1,90 +1,114 @@
 import streamlit as st
-import openai
+import pandas as pd
+import matplotlib.pyplot as plt
+from openai import OpenAI
+import fitz  # PyMuPDF
+import base64
 
-# Securely load OpenAI API key
-openai.api_key = st.secrets["OPENAI_API_KEY"]
+# Load OpenAI API key from Streamlit secrets
+client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
 
-# --- Page config ---
-st.set_page_config(page_title="AI Health Agent", layout="centered")
+# Dummy users for demo login
+USERS = {
+    "dr@example.com": {"password": "demo123", "role": "doctor"},
+    "patient@example.com": {"password": "demo123", "role": "patient"}
+}
 
-# --- Session State for Role Management ---
-if "role" not in st.session_state:
-    st.session_state.role = None
-
-# --- Login Logic ---
+# Session state login function
 def login():
-    st.title("🩺 AI Health Agent Login")
-
+    st.title("🔐 Login to AI Health Agent")
     email = st.text_input("Email")
     password = st.text_input("Password", type="password")
-    login_btn = st.button("Login")
-
-    if login_btn:
-        if email == "dr@example.com" and password == "demo123":
-            st.session_state.role = "doctor"
-        elif email == "patient@example.com" and password == "demo123":
-            st.session_state.role = "patient"
+    if st.button("Login"):
+        user = USERS.get(email)
+        if user and user["password"] == password:
+            st.session_state.user = {"email": email, "role": user["role"]}
+            st.experimental_rerun()
         else:
-            st.error("Invalid login credentials")
+            st.error("Invalid credentials")
 
-# --- Symptom Triage Prompt ---
+# New OpenAI function
 def get_triage_response(symptoms):
-    prompt = f"""
-You are a healthcare assistant. A patient has described their symptoms as:
-\"\"\"{symptoms}\"\"\"
-
-Give a brief summary of the likely condition and urgency level (low, moderate, high).
-Respond in plain language.
-"""
-    response = openai.ChatCompletion.create(
-        model="gpt-4",
-        messages=[{"role": "user", "content": prompt}],
-        temperature=0.5,
-        max_tokens=200,
+    system_prompt = (
+        "You are a medical triage assistant. Based on the user's symptoms, "
+        "assess urgency (low/medium/high) and recommend next steps."
     )
-    return response.choices[0].message["content"]
+    user_prompt = f"Symptoms: {symptoms}"
 
-# --- Patient View ---
+    response = client.chat.completions.create(
+        model="gpt-4",
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ],
+        max_tokens=200,
+        temperature=0.7,
+    )
+    return response.choices[0].message.content
+
+def extract_text_from_pdf(uploaded_file):
+    with fitz.open(stream=uploaded_file.read(), filetype="pdf") as doc:
+        text = ""
+        for page in doc:
+            text += page.get_text()
+        return text
+
 def patient_dashboard():
-    st.title("👨‍⚕️ Patient Dashboard")
+    st.header("🧑‍⚕️ Patient Dashboard")
 
     symptoms = st.text_area("Describe your symptoms:")
-    if st.button("Analyze"):
-        if symptoms.strip() != "":
-            with st.spinner("Analyzing symptoms..."):
-                result = get_triage_response(symptoms)
-            st.subheader("🩺 Triage Result")
-            st.success(result)
+    if st.button("Submit for Triage"):
+        if symptoms.strip():
+            result = get_triage_response(symptoms)
+            st.success("Triage Result:")
+            st.write(result)
         else:
-            st.warning("Please enter your symptoms.")
+            st.warning("Please enter symptoms.")
 
-    st.markdown("---")
-    st.caption("Logged in as Patient | [Logout](#)", unsafe_allow_html=True)
-    if st.button("Logout"):
-        st.session_state.role = None
+    st.subheader("📤 Upload EHR Report (PDF)")
+    uploaded_file = st.file_uploader("Choose a PDF file", type="pdf")
+    if uploaded_file:
+        with st.spinner("Extracting data..."):
+            text = extract_text_from_pdf(uploaded_file)
+            st.text_area("Extracted Text", value=text, height=200)
 
-# --- Doctor View ---
 def doctor_dashboard():
-    st.title("🧑‍⚕️ Doctor Dashboard")
+    st.header("👨‍⚕️ Doctor Dashboard")
 
-    st.markdown("Welcome, Doctor. Future features here:")
-    st.markdown("- View patient summaries")
-    st.markdown("- Review uploaded EHRs")
-    st.markdown("- Monitor patient analytics")
+    st.subheader("📈 User Activity Logs (Simulated)")
+    data = pd.DataFrame({
+        "Patient": ["Alice", "Bob", "Charlie", "David"],
+        "Interactions": [5, 3, 6, 2]
+    })
+    st.dataframe(data)
 
-    st.markdown("---")
-    st.caption("Logged in as Doctor | [Logout](#)", unsafe_allow_html=True)
-    if st.button("Logout"):
-        st.session_state.role = None
+    st.subheader("📊 Chart View")
+    fig, ax = plt.subplots()
+    ax.bar(data["Patient"], data["Interactions"], color="green")
+    ax.set_title("Patient Interactions")
+    st.pyplot(fig)
 
-# --- App Logic ---
+    st.subheader("📤 EHR Upload (PDF)")
+    uploaded_file = st.file_uploader("Upload patient EHR", type="pdf")
+    if uploaded_file:
+        text = extract_text_from_pdf(uploaded_file)
+        st.text_area("Extracted EHR Text", value=text, height=200)
+
 def main():
-    if st.session_state.role is None:
+    if "user" not in st.session_state:
         login()
-    elif st.session_state.role == "patient":
-        patient_dashboard()
-    elif st.session_state.role == "doctor":
-        doctor_dashboard()
+    else:
+        user = st.session_state.user
+        st.sidebar.write(f"Logged in as: `{user['email']}` ({user['role']})")
+        if user["role"] == "doctor":
+            doctor_dashboard()
+        else:
+            patient_dashboard()
+
+        if st.sidebar.button("Logout"):
+            del st.session_state.user
+            st.experimental_rerun()
 
 if __name__ == "__main__":
+    st.set_page_config(page_title="AI Health Agent", layout="centered")
     main()
